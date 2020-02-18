@@ -1,0 +1,70 @@
+
+import UIKit
+import FBSDKCoreKit
+import FBSDKLoginKit
+
+enum CompletionHandlerenum {
+    case success(twitterUserDetail) ,failure(Error)
+}
+
+class FaceBookLogin: NSObject {
+
+    typealias CompletionHandler = (CompletionHandlerenum) -> ()
+
+    static let shared = FaceBookLogin()
+
+    var facebookUser : userDetail?
+    
+    func loginButtonAction(completionHandler:@escaping CompletionHandler){
+        let login = LoginManager()
+        login.logOut()
+        login.logOut()
+        
+        AccessToken.current = nil
+        Profile.current = nil
+//        Profile.current(nil)
+//        AccessToken.current(nil)
+     //   login.loginBehavior = LoginBehavior.web
+        
+        login.logIn(permissions: ["public_profile", "email"], from: UIApplication.shared.keyWindow?.rootViewController, handler: {(result, error) in
+            if error != nil {
+                print("Error : \(String(describing: error))")
+                completionHandler(CompletionHandlerenum.failure(error!))
+            } else if (result?.isCancelled)! {
+                
+            } else {
+                GraphRequest(graphPath: "me", parameters: ["fields": "first_name, last_name, picture.type(large), email, name, id, gender"]).start(completionHandler: {(connection, result, error) -> Void in
+                    if error != nil{
+                        print("Error :\(error!)")
+                    }else{
+                        let getDetail = userDetail.init(result: result as! NSDictionary)
+                        let detail = twitterUserDetail(email: getDetail.email, authToken: "", authTokenSecret: "", userName: getDetail.fullname, userID: getDetail.facebookID, profileImageURL: getDetail.imgProfile, profileImageLargeURL: "")
+                        completionHandler(CompletionHandlerenum.success(detail))
+                    }
+                })
+            }
+        })
+    }
+}
+class twitterUserDetail : NSObject{
+    
+    var email = ""
+    var authToken = ""
+    var authTokenSecret = ""
+    var userName = ""
+    var userID = ""
+    var profileImageURL = ""
+    var profileImageLargeURL = ""
+    
+    init(email:String,authToken:String,authTokenSecret:String,userName:String,userID:String,profileImageURL:String,profileImageLargeURL:String) {
+        self.email = email
+        self.authToken = authToken
+        self.authTokenSecret = authTokenSecret
+        self.userName = userName
+       
+        self.userID = userID
+        self.profileImageURL = profileImageURL
+        self.profileImageLargeURL = profileImageLargeURL
+    }
+       
+}
