@@ -1,0 +1,239 @@
+
+import UIKit
+import LinkedinSwift
+import WebKit
+enum linkedinCompletionHandlerenum {
+    case success(twitterUserDetail) ,failure(Error)
+}
+
+class LoginWithLinkedin: NSObject , WKNavigationDelegate {
+    
+    // MARK: IBOutlet Properties
+    
+    
+    
+    static let shared = LoginWithLinkedin()
+    
+    // MARK: Constants
+    // add your project key and secret also redirect URI
+    let linkedInKey = ""
+    let linkedInSecret = ""
+    var LoginVc = UIViewController()
+    let authorizationEndPoint = "https://www.linkedin.com/uas/oauth2/authorization"
+    let accessTokenEndPoint = "https://www.linkedin.com/uas/oauth2/accessToken"
+    
+    var webkit = WKWebView()
+    typealias CompletionHandler = (TwitercompletionHandlerenum) -> ()
+    var handler : CompletionHandler!
+   
+    func initLinkedin(VC:UIViewController,completionHandler:@escaping CompletionHandler) {
+        LoginVc = VC
+        self.handler = completionHandler
+        webkit = WKWebView()
+        WebCacheCleaner.clean()
+        webkit.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+        
+        LoginVc.view.addSubview(webkit)
+        webkit.navigationDelegate = self
+        // Do any additional setup after loading the view.
+        
+        startAuthorization(web: webkit)
+    }
+    
+    
+    // MARK: Custom Functions
+    
+    func startAuthorization(web:WKWebView) {
+        let responseType = "code"
+        let redirectURL = ""
+        let state = "linkedin\(Int(NSDate().timeIntervalSince1970))"
+        let scope =  "r_liteprofile,r_emailaddress"
+        var authorizationURL = "\(authorizationEndPoint)?"
+        authorizationURL += "response_type=\(responseType)&"
+        authorizationURL += "client_id=\(linkedInKey)&"
+        authorizationURL += "redirect_uri=\(redirectURL)&"
+        authorizationURL += "state=\(state)&"
+        authorizationURL += "scope=\(scope)"
+        
+        let request = URLRequest(url: URL(string: authorizationURL)!)
+        web.load(request)
+    }
+    
+    
+    func requestForAccessToken(authorizationCode: String) {
+        let grantType = "authorization_code"
+        
+        let redirectURL = ""
+        
+        // Set the POST parameters.
+        var postParams = "grant_type=\(grantType)&"
+        postParams += "code=\(authorizationCode)&"
+        postParams += "redirect_uri=\(redirectURL)&"
+        postParams += "client_id=\(linkedInKey)&"
+        postParams += "client_secret=\(linkedInSecret)"
+        
+        // Convert the POST parameters into a NSData object.
+        let postData = postParams.data(using: String.Encoding.utf8)
+        
+        
+        // Initialize a mutable URL request object using the access token endpoint URL string.
+        let request = NSMutableURLRequest(url: NSURL(string: accessTokenEndPoint)! as URL)
+        
+        // Indicate that we're about to make a POST request.
+        request.httpMethod = "POST"
+        
+        // Set the HTTP body using the postData object created above.
+        request.httpBody = postData
+        
+        // Add the required HTTP header field.
+        request.addValue("application/x-www-form-urlencoded;", forHTTPHeaderField: "Content-Type")
+        
+        
+        // Initialize a NSURLSession object.
+        let session = URLSession(configuration: URLSessionConfiguration.default)
+        
+        // Make the request.
+        let task: URLSessionDataTask = session.dataTask(with: request as URLRequest) { (data, response, error) -> Void in
+            // Get the HTTP status code of the request.
+            let statusCode = (response as! HTTPURLResponse).statusCode
+            
+            if statusCode == webStatusCode.success {
+                // Convert the received JSON data into a dictionary.
+                do {
+                    let dataDictionary = try JSONSerialization.jsonObject(with: data!, options: JSONSerialization.ReadingOptions.mutableContainers) as! [String:Any]
+                    let accessToken = dataDictionary["access_token"] as! String
+                    self.fetchLinkedInUserProfile(accessToken: accessToken)
+                   // self.fetch(accessToken: accessToken)
+                }
+                catch {
+                    print("Could not convert JSON data into a dictionary.")
+                }
+            }
+        }
+        
+        task.resume()
+    }
+   
+
+    func fetchLinkedInUserProfile(accessToken: String) {
+           let tokenURLFull = "https://api.linkedin.com/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))&oauth2_access_token=\(accessToken)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+           let verify: NSURL = NSURL(string: tokenURLFull!)!
+           let request: NSMutableURLRequest = NSMutableURLRequest(url: verify as URL)
+           let task = URLSession.shared.dataTask(with: request as URLRequest) { data, response, error in
+               if error == nil {
+                   let linkedInProfileModel = try? JSONDecoder().decode(LinkedInProfileModel.self, from: data!)
+                   
+                   //AccessToken
+                   print("LinkedIn Access Token: \(accessToken)")
+                   
+                   // LinkedIn Id
+                   let linkedinId: String! = linkedInProfileModel?.id
+                   print("LinkedIn Id: \(linkedinId ?? "")")
+                   
+                   // LinkedIn First Name
+                   let linkedinFirstName: String! = linkedInProfileModel?.firstName.localized.enUS
+                   print("LinkedIn First Name: \(linkedinFirstName ?? "")")
+                   
+                   // LinkedIn Last Name
+                   let linkedinLastName: String! = linkedInProfileModel?.lastName.localized.enUS
+                   print("LinkedIn Last Name: \(linkedinLastName ?? "")")
+                   
+                   // LinkedIn Profile Picture URL
+                   let linkedinProfilePic: String!
+                   
+                   if let pictureUrls = linkedInProfileModel?.profilePicture.displayImage.elements[2].identifiers[0].identifier {
+                       linkedinProfilePic = pictureUrls
+                   } else {
+                       linkedinProfilePic = "Not exists"
+                   }
+                   print("LinkedIn Profile Avatar URL: \(linkedinProfilePic ?? "")")
+                   let fullname = linkedinFirstName + " " + linkedinLastName
+                   let userdeail = twitterUserDetail(email: "", authToken: accessToken, authTokenSecret: "", userName: fullname, userID: linkedinId, profileImageURL: linkedinProfilePic, profileImageLargeURL: "")
+                   // Get user's email address
+                   self.fetchLinkedInEmailAddress(accessToken: accessToken, UserDeatil: userdeail)
+               }
+           }
+           task.resume()
+       }
+    func fetchLinkedInEmailAddress(accessToken: String, UserDeatil:twitterUserDetail) {
+        let tokenURLFull = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))&oauth2_access_token=\(accessToken)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        let verify: NSURL = NSURL(string: tokenURLFull!)!
+        let request: NSMutableURLRequest = NSMutableURLRequest(url: verify as URL)
+        let task = URLSession.shared.dataTask(with: request as URLRequest) { data, response, error in
+            if error == nil {
+                let linkedInEmailModel = try? JSONDecoder().decode(LinkedInEmailModel.self, from: data!)
+                
+                // LinkedIn Email
+                let linkedinEmail: String! = linkedInEmailModel?.elements[0].elementHandle.emailAddress
+                print("LinkedIn Email: \(linkedinEmail ?? "")")
+                UserDeatil.email = linkedinEmail
+                self.handler(TwitercompletionHandlerenum.success(UserDeatil))
+                //handler(linkedinCompletionHandlerenum.success(UserDeatil))
+            }
+            DispatchQueue.main.async {
+                self.webkit.removeFromSuperview()
+                self.LoginVc.dismiss(animated: true, completion: nil)
+                //  self.dismissViewControllerAnimated(true, completion: nil)
+            }
+        }
+        task.resume()
+    }
+ 
+    
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let url = navigationAction.request.url!
+        print(url)
+        print(url.host)
+        // add redirect uri host 
+        if url.host == "" {
+            if url.absoluteString.range(of: "code") != nil {
+                // Extract the authorization code.
+                let urlParts = url.absoluteString.components(separatedBy: "?")
+                let code = urlParts[1].components(separatedBy: "=")[1]
+                requestForAccessToken(authorizationCode: code)
+                decisionHandler(.allow)
+                return
+            }
+            self.webkit.removeFromSuperview()
+            decisionHandler(.cancel)
+            return
+                     // return
+        }else {
+            decisionHandler(.allow)
+        }
+    }
+}
+class twitterUserDetail : NSObject{
+    
+    var email = ""
+    var authToken = ""
+    var authTokenSecret = ""
+    var userName = ""
+    var userID = ""
+    var profileImageURL = ""
+    var profileImageLargeURL = ""
+    
+    init(email:String,authToken:String,authTokenSecret:String,userName:String,userID:String,profileImageURL:String,profileImageLargeURL:String) {
+        self.email = email
+        self.authToken = authToken
+        self.authTokenSecret = authTokenSecret
+        self.userName = userName
+       
+        self.userID = userID
+        self.profileImageURL = profileImageURL
+        self.profileImageLargeURL = profileImageLargeURL
+    }
+       
+}
+final class WebCacheCleaner {
+    class func clean() {
+        HTTPCookieStorage.shared.removeCookies(since: Date.distantPast)
+        print("[WebCacheCleaner] All cookies deleted")
+        WKWebsiteDataStore.default().fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
+            records.forEach { record in
+                WKWebsiteDataStore.default().removeData(ofTypes: record.dataTypes, for: [record], completionHandler: {})
+               // print("[WebCacheCleaner] Record \(record) deleted")
+            }
+        }
+    }
+}
