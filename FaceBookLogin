@@ -68,3 +68,20 @@ class twitterUserDetail : NSObject{
     }
        
 }
+
+// call
+
+FaceBookLogin.shared.loginButtonAction { (result) in
+            switch result {
+            case .success(let _userInfo):
+                //127509178551008
+                print(_userInfo)
+                print(_userInfo.userName)
+                print(_userInfo.userID)
+                print(_userInfo.email)
+                print(_userInfo.profileImageURL)
+                self.webSignup(userDetail: _userInfo, socialType: social_type.facebook)
+            case .failure(let error):
+                print(error)
+            }
+        }
