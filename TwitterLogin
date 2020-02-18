@@ -1,0 +1,100 @@
+//
+//  TwitterLogin.swift
+//  Green Cup
+//
+//  Created by HiralK on 05/02/20.
+//  Copyright © 2020 Hiral K. All rights reserved.
+//
+
+import UIKit
+import TwitterKit
+enum TwitercompletionHandlerenum {
+    case success(twitterUserDetail) ,failure(Error)
+}
+class TwitterLogin: NSObject {
+    
+    typealias CompletionHandler = (TwitercompletionHandlerenum) -> ()
+    
+    static let shared = TwitterLogin()
+    
+    var facebookUser : twitterUserDetail?
+    func twitterLogin(completionHandler:@escaping CompletionHandler){
+        TWTRTwitter.sharedInstance().logIn(completion: { (session, error) in
+            guard let unwrappedSession = session else {//early return if error
+                print("Login error: %@", error!.localizedDescription);
+                completionHandler(TwitercompletionHandlerenum.failure(error!))
+                return
+            }
+           // print(unwrappedSession.authToken)
+          //  print(unwrappedSession.userName)
+          //  print(unwrappedSession.userID)
+          //  print(unwrappedSession.authTokenSecret)
+            let twitterClient = TWTRAPIClient(userID: session?.userID)
+            var emailId = ""
+            let client = TWTRAPIClient.withCurrentUser()
+            client.requestEmail { email, error in
+                if (email != nil) {
+                    emailId = email ?? ""
+                }else {
+                    print("error--: \(String(describing: error?.localizedDescription))");
+                }
+            }
+            var profileImageURL = ""
+            var profileImageLargeURL = ""
+            
+            twitterClient.loadUser(withID: session?.userID ?? "") {(user, error) in
+               // print(user?.profileImageURL ?? "")
+               // print(user?.profileImageLargeURL ?? "")
+               // print(user?.screenName ?? "")
+                profileImageLargeURL = user?.profileImageLargeURL ?? ""
+                profileImageURL = user?.profileImageURL ?? ""
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: {
+                 let userDetail = twitterUserDetail(email: emailId, authToken: unwrappedSession.authToken, authTokenSecret: unwrappedSession.authTokenSecret, userName: unwrappedSession.userName, userID: unwrappedSession.userID, profileImageURL: profileImageURL, profileImageLargeURL: profileImageLargeURL)
+                  completionHandler(TwitercompletionHandlerenum.success(userDetail))
+            })
+            
+        })
+    }
+    
+    
+}
+class twitterUserDetail : NSObject{
+    
+    var email = ""
+    var authToken = ""
+    var authTokenSecret = ""
+    var userName = ""
+    var userID = ""
+    var profileImageURL = ""
+    var profileImageLargeURL = ""
+    
+    init(email:String,authToken:String,authTokenSecret:String,userName:String,userID:String,profileImageURL:String,profileImageLargeURL:String) {
+        self.email = email
+        self.authToken = authToken
+        self.authTokenSecret = authTokenSecret
+        self.userName = userName
+       
+        self.userID = userID
+        self.profileImageURL = profileImageURL
+        self.profileImageLargeURL = profileImageLargeURL
+    }
+       
+}
+
+
+
+       TwitterLogin.shared.twitterLogin { (result) in
+            switch result {
+            case .success(let _userInfo):
+                print(_userInfo)
+                print(_userInfo.userName)
+                print(_userInfo.userID)
+                print(_userInfo.email)
+                print(_userInfo.profileImageURL)
+                self.webSignup(userDetail: _userInfo, socialType: social_type.Twitter)
+            case .failure(let error):
+                print(error)
+            }
+        }
