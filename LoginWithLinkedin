@@ -225,6 +225,28 @@ class twitterUserDetail : NSObject{
     }
        
 }
+// call
+  LoginWithLinkedin.shared.initLinkedin(VC: self, completionHandler: { (result) in
+            switch result {
+            case .success(let _userInfo):
+                self.startAnimating()
+                print(_userInfo)
+                print(_userInfo.userName)
+                print(_userInfo.userID)
+                print(_userInfo.email)
+                print(_userInfo.authToken)
+                print(_userInfo.profileImageURL)
+               /// DispatchQueue.main.async {
+
+                    self.webSignup(userDetail: _userInfo, socialType: social_type.Linkedin)
+               // }
+            case .failure(let error):
+                print(error)
+            }
+        })
+        
+        
+        
 final class WebCacheCleaner {
     class func clean() {
         HTTPCookieStorage.shared.removeCookies(since: Date.distantPast)
